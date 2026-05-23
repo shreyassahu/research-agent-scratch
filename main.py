@@ -1,6 +1,9 @@
 import os
 from anthropic import Anthropic
 from dotenv import load_dotenv
+from calculator import calculate_expression
+from web_search import get_web_result
+from datetime import date
 
 load_dotenv()
 
@@ -8,16 +11,26 @@ converstation_history = []
 
 
 user_question = "Can you check today's weather in Boston??"
+# user_question = "What is 15% of the current Bitcoin price?"
+# user_question = "What's the best programming language??"
+# user_question = "What were the most significant AI research breakthroughs in the last month?"
+
+
 
 fake_result = "Boston, MA: 72°F, partly cloudy, humidity 45%, wind 8 mph NW. High of 78°F, low of 62°F."
 
 converstation_history.append(user_question)
 converstation_history.append(fake_result)
 
-system_prompt = """You are a research agent with access to these tools: web_search, calculator.
+system_prompt = f"""You are a research agent with access to these tools: web_search, calculator.
+
+                Today's date is {date.today()}
 
                 When you need to use a tool, end your response with:
                 [TOOL] tool_name [INPUT] your input here [END]
+
+                After receiving tool results, first assess: Is this information sufficient, reliable, and relevant? 
+                If not, explain what's missing and try a different approach.
 
                 When you have enough information to give a final answer, end your response with:
                 [FINAL] your complete answer here [END]
@@ -46,7 +59,7 @@ client = Anthropic(
 
 messages = [{"role": "user", "content": user_question}]
 
-for i in range(5):
+for i in range(6):
     message = client.messages.create(
         max_tokens=1024,
         system=system_prompt,
@@ -67,11 +80,31 @@ for i in range(5):
 
     elif "[TOOL]" in ai_response:
         messages.append({"role": "assistant", "content": ai_response})
-        messages.append({"role": "user", "content": f"Tool result: {fake_result}"})
+
+        input_start = ai_response.find("[INPUT]") + 7
+        input_end = ai_response.find("[END]")
+        tool_start = ai_response.find("[TOOL]") + 6
+        tool_end = ai_response.find("[INPUT]")
+
+        tool_input = ai_response[input_start:input_end].strip()
+        tool_name = ai_response[tool_start:tool_end].strip()
+
+        tool_result = ""
+
+        if tool_name == "web_search":
+            tool_result = get_web_result(tool_input)
+        elif tool_name == "calculator":
+            tool_result = calculate_expression(tool_input)
+
+        messages.append({"role": "user", "content": f"Tool result: {tool_result}"})
 
     else:
-        messages.append({"role": "assistant", "content": ai_response})
-        messages.append({"role": "user", "content": "Please respond with either [TOOL]...[END] or [FINAL]...[END] as instructed."})
+        if i == 4:
+            messages.append({"role": "assistant", "content": ai_response})
+            messages.append({"role": "user", "content": "You've used all your tool calls. Give your [FINAL] answer with what you have."})
+        else:
+            messages.append({"role": "assistant", "content": ai_response})
+            messages.append({"role": "user", "content": "Please respond with either [TOOL]...[END] or [FINAL]...[END] as instructed."})
 
 
     
