@@ -1,5 +1,5 @@
 import os
-from anthropic import Anthropic
+from anthropic import AsyncAnthropic
 from dotenv import load_dotenv
 from calculator import calculate_expression
 from web_search import get_web_result
@@ -7,20 +7,9 @@ from datetime import date
 
 load_dotenv()
 
-# user_question = "Can you check today's weather in Boston??"
-# user_question = "What is 15% of the current Bitcoin price?"
-# user_question = "What's the best programming language??"
-# user_question = "What were the most significant AI research breakthroughs in the last month?"
 
-def call_claude(user_question):
-
-    converstation_history = []
+async def call_claude(user_question):
     tools_used = []
-
-    fake_result = "Boston, MA: 72°F, partly cloudy, humidity 45%, wind 8 mph NW. High of 78°F, low of 62°F."
-
-    converstation_history.append(user_question)
-    converstation_history.append(fake_result)
 
     system_prompt = f"""You are a research agent with access to these tools: web_search, calculator.
 
@@ -51,64 +40,66 @@ def call_claude(user_question):
                     Assistant: I already know this from my training data.
                     [FINAL] William Shakespeare wrote Hamlet, believed to have been written between 1599 and 1601. [END]"""
 
-    prompt = f"Question: {user_question}. {system_prompt}"
 
-    client = Anthropic(
+    client = AsyncAnthropic(
         api_key=os.environ.get("ANTHROPIC_API_KEY"),
     )
 
     messages = [{"role": "user", "content": user_question}]
 
     for i in range(6):
-        message = client.messages.create(
-            max_tokens=1024,
-            system=system_prompt,
-            messages=messages,
-            model="claude-sonnet-4-5",
-        )
 
-        ai_response = message.content[0].text
+        try:
+            message = await client.messages.create(
+                max_tokens=1024,
+                system=system_prompt,
+                messages=messages,
+                model="claude-sonnet-4-5",
+            )
 
-        print(f"\n--- Iteration {i+1} ---")
-        print(f"Claude: {ai_response}")
+            ai_response = message.content[0].text
 
-        if "[FINAL]" in ai_response:
-            final_start = ai_response.find("[FINAL]") + 7
-            final_end = ai_response.find("[END]")
-            final_answer = ai_response[final_start:final_end].strip()
-            print(f"Final answer: {final_answer}")
-            return {"answer" : final_answer, "iterations": i+1, "tools_used": tools_used}
-            
+            print(f"\n--- Iteration {i+1} ---")
+            print(f"Claude: {ai_response}")
 
-        elif "[TOOL]" in ai_response:
-            messages.append({"role": "assistant", "content": ai_response})
+            if "[FINAL]" in ai_response:
+                final_start = ai_response.find("[FINAL]") + 7
+                final_end = ai_response.find("[END]")
+                final_answer = ai_response[final_start:final_end].strip()
+                print(f"Final answer: {final_answer}")
+                return {"answer" : final_answer, "iterations": i+1, "tools_used": tools_used}
+                
 
-            input_start = ai_response.find("[INPUT]") + 7
-            input_end = ai_response.find("[END]")
-            tool_start = ai_response.find("[TOOL]") + 6
-            tool_end = ai_response.find("[INPUT]")
-
-            tool_input = ai_response[input_start:input_end].strip()
-            tool_name = ai_response[tool_start:tool_end].strip()
-
-            tools_used.append(tool_name)
-
-            tool_result = ""
-
-            if tool_name == "web_search":
-                tool_result = get_web_result(tool_input)
-            elif tool_name == "calculator":
-                tool_result = calculate_expression(tool_input)
-
-            messages.append({"role": "user", "content": f"Tool result: {tool_result}"})
-
-        else:
-            if i == 4:
+            elif "[TOOL]" in ai_response:
                 messages.append({"role": "assistant", "content": ai_response})
-                messages.append({"role": "user", "content": "You've used all your tool calls. Give your [FINAL] answer with what you have."})
+
+                input_start = ai_response.find("[INPUT]") + 7
+                input_end = ai_response.find("[END]")
+                tool_start = ai_response.find("[TOOL]") + 6
+                tool_end = ai_response.find("[INPUT]")
+
+                tool_input = ai_response[input_start:input_end].strip()
+                tool_name = ai_response[tool_start:tool_end].strip()
+
+                tools_used.append(tool_name)
+
+                tool_result = ""
+
+                if tool_name == "web_search":
+                    tool_result = await get_web_result(tool_input)
+                elif tool_name == "calculator":
+                    tool_result = calculate_expression(tool_input)
+
+                messages.append({"role": "user", "content": f"Tool result: {tool_result}"})
+
             else:
-                messages.append({"role": "assistant", "content": ai_response})
-                messages.append({"role": "user", "content": "Please respond with either [TOOL]...[END] or [FINAL]...[END] as instructed."})
+                if i == 4:
+                    messages.append({"role": "assistant", "content": ai_response})
+                    messages.append({"role": "user", "content": "You've used all your tool calls. Give your [FINAL] answer with what you have."})
+                else:
+                    messages.append({"role": "assistant", "content": ai_response})
+                    messages.append({"role": "user", "content": "Please respond with either [TOOL]...[END] or [FINAL]...[END] as instructed."})
 
 
-        
+        except Exception as e:
+            return {"msg" : "Unable to fetch response from Claude"}    

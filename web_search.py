@@ -1,17 +1,17 @@
-from tavily import TavilyClient
+from tavily import AsyncTavilyClient
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
-client = TavilyClient(
+client = AsyncTavilyClient(
      api_key=os.environ.get("TAVILY_API_KEY")
 )
 
-def get_web_result(ai_query):
+async def get_web_result(ai_query):
 
     try:
-        response = client.search(
+        response = await client.search(
             query=ai_query,
             search_depth="advanced"
         )

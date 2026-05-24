@@ -1,0 +1,4 @@
+# user_question = "Can you check today's weather in Boston??"
+# user_question = "What is 15% of the current Bitcoin price?"
+# user_question = "What's the best programming language??"
+# user_question = "What were the most significant AI research breakthroughs in the last month?"
